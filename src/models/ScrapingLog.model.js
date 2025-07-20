@@ -49,7 +49,8 @@ const scrapingLogSchema = new mongoose.Schema(
         type: Number,
         default: 0,
       },
-      errors: {
+      // FIXED: Renamed 'errors' to 'errorCount' to avoid mongoose warning
+      errorCount: {
         type: Number,
         default: 0,
       },
@@ -71,7 +72,7 @@ const scrapingLogSchema = new mongoose.Schema(
         },
         jobsFound: Number,
         jobsSaved: Number,
-        errors: Number,
+        errorCount: Number, // Changed from 'errors' to 'errorCount'
         processingTime: Number, // in milliseconds
       },
     ],
@@ -90,8 +91,8 @@ const scrapingLogSchema = new mongoose.Schema(
       },
     },
 
-    // Error details
-    errors: [
+    // Error details - renamed field to avoid mongoose warning
+    errorDetails: [
       {
         platform: String,
         errorType: String,
@@ -130,58 +131,71 @@ const scrapingLogSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    // FIXED: Add option to suppress reserved keys warning
+    suppressReservedKeysWarning: true,
   }
 );
 
-// Indexes
-scrapingLogSchema.index({ user: 1 });
-scrapingLogSchema.index({ status: 1 });
+// Indexes for better query performance
+scrapingLogSchema.index({ user: 1, createdAt: -1 });
 scrapingLogSchema.index({ sessionId: 1 });
+scrapingLogSchema.index({ status: 1 });
 scrapingLogSchema.index({ "timing.startedAt": -1 });
 
 // Static method to get scraping statistics
-scrapingLogSchema.statics.getStatistics = async function (
-  userId = null,
-  timeframe = 30
-) {
+scrapingLogSchema.statics.getStatistics = async function (userId, period = 30) {
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() - timeframe);
+  startDate.setDate(startDate.getDate() - period);
 
-  const matchStage = {
-    "timing.startedAt": { $gte: startDate },
-  };
-
-  if (userId) {
-    matchStage.user = new mongoose.Types.ObjectId(userId);
-  }
-
-  const stats = await this.aggregate([
-    { $match: matchStage },
+  return await this.aggregate([
+    {
+      $match: {
+        user: userId,
+        createdAt: { $gte: startDate },
+      },
+    },
     {
       $group: {
         _id: null,
-        totalSessions: { $sum: 1 },
-        completedSessions: {
-          $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+        totalRuns: { $sum: 1 },
+        successfulRuns: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+          },
         },
-        totalJobsFound: { $sum: "$results.totalJobsFound" },
         totalJobsSaved: { $sum: "$results.jobsSaved" },
+        totalJobsFound: { $sum: "$results.totalJobsFound" },
+        totalErrors: { $sum: "$results.errorCount" },
         averageDuration: { $avg: "$timing.duration" },
-        totalErrors: { $sum: "$results.errors" },
       },
     },
   ]);
+};
 
-  return (
-    stats[0] || {
-      totalSessions: 0,
-      completedSessions: 0,
-      totalJobsFound: 0,
-      totalJobsSaved: 0,
-      averageDuration: 0,
-      totalErrors: 0,
-    }
-  );
+// Instance method to calculate success rate
+scrapingLogSchema.methods.getSuccessRate = function () {
+  if (this.results.totalJobsFound === 0) return 0;
+  return (this.results.jobsSaved / this.results.totalJobsFound) * 100;
+};
+
+// Instance method to mark as completed
+scrapingLogSchema.methods.markAsCompleted = function (results) {
+  this.status = "completed";
+  this.timing.completedAt = new Date();
+  this.timing.duration = this.timing.completedAt - this.timing.startedAt;
+  this.results = { ...this.results, ...results };
+  return this.save();
+};
+
+// Instance method to mark as failed
+scrapingLogSchema.methods.markAsFailed = function (errorDetails) {
+  this.status = "failed";
+  this.timing.completedAt = new Date();
+  this.timing.duration = this.timing.completedAt - this.timing.startedAt;
+  if (errorDetails) {
+    this.errorDetails.push(errorDetails);
+  }
+  return this.save();
 };
 
 module.exports = mongoose.model("ScrapingLog", scrapingLogSchema);

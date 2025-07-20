@@ -6,7 +6,7 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 
-const errorHandler = require("./middleware/error.middleware");
+const { errorHandler } = require("./middleware/error.middleware");
 const logger = require("./utils/logger");
 
 // Route imports

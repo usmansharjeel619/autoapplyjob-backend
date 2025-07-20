@@ -1,0 +1,2 @@
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-07-20T20:45:08.739Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-07-20T20:45:08.809Z"}
