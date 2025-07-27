@@ -17,7 +17,7 @@ const authenticate = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      const user = await User.findById(decoded.userId).select("-password");
+      const user = await User.findById(decoded.id).select("-password");
       if (!user) {
         return ApiResponse.unauthorized(res, "User not found");
       }
@@ -64,7 +64,7 @@ const optionalAuth = async (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId).select("-password");
+      const user = await User.findById(decoded.id).select("-password");
 
       if (user && user.isActive) {
         req.user = user;

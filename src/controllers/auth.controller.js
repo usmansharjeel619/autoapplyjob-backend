@@ -123,6 +123,7 @@ const refreshToken = asyncHandler(async (req, res) => {
 const verifyEmail = asyncHandler(async (req, res) => {
   const { token } = req.body;
 
+  console.log("Received verification token:", token);
   if (!token) {
     throw new AppError("Verification token is required", 400);
   }
