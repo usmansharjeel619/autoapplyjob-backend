@@ -24,3 +24,16 @@
 {"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <afafd8fd-ea3c-eb40-bdb0-da3e012dad02@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-26T23:35:19.458Z"}
 {"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <a129f8ad-7791-8eba-0646-636099fcc7dc@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:25:38.229Z"}
 {"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <8a165baa-f778-b711-f3aa-de5445e45042@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:29:24.756Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:35:26.511Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:35:26.573Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:36:44.992Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:36:45.048Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:36:48.107Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:36:48.166Z"}
+{"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <235db174-4092-7201-3812-37047c94ecb7@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:40:03.511Z"}
+{"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <7ad06004-1960-f30d-c035-25aa808f101a@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:41:19.849Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:46:21.366Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:46:21.433Z"}
+{"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <b609c35f-2fc0-9470-78a3-83fe44c7acd5@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:49:17.812Z"}
+{"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <9bdaa3d9-ba4b-454f-956d-155acac691ea@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:54:04.898Z"}
+{"level":"info","message":"Email sent successfully to usmansharjeel619@gmail.com: <59e6923e-3e10-d9f8-2d85-228f7ee1e6bc@autoapplyjob.com>","service":"autoapplyjob-backend","timestamp":"2025-07-27T00:56:06.510Z"}

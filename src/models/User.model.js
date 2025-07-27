@@ -1,3 +1,4 @@
+// src/models/User.model.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -83,91 +84,87 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Resume Information
+    // Resume
     resume: {
-      fileName: String,
+      filename: String,
       originalName: String,
       url: String,
-      cloudinaryPublicId: String,
       uploadedAt: Date,
+      size: Number,
     },
 
     // Job Preferences
     jobPreferences: {
-      preferredJobTypes: [
+      desiredRoles: [String],
+      preferredLocations: [String],
+      jobTypes: [
         {
           type: String,
           enum: [
-            "full_time",
-            "part_time",
+            "full-time",
+            "part-time",
             "contract",
             "freelance",
             "internship",
           ],
         },
       ],
-      preferredWorkTypes: [
+      workTypes: [
         {
           type: String,
           enum: ["remote", "hybrid", "onsite"],
         },
       ],
-      preferredIndustries: [
-        {
+      industries: [String],
+      salaryRange: {
+        min: Number,
+        max: Number,
+        currency: {
           type: String,
+          default: "USD",
         },
-      ],
-      preferredLocations: [
-        {
-          type: String,
-        },
-      ],
-      minSalary: {
-        type: Number,
-        min: 0,
       },
-      maxSalary: {
-        type: Number,
-        min: 0,
-      },
-      autoApplyEnabled: {
+      willingToRelocate: {
         type: Boolean,
         default: false,
       },
     },
 
-    // Package Information
+    // Package/Subscription
     package: {
       type: {
         type: String,
         enum: ["basic", "premium", "enterprise"],
         default: "basic",
       },
-      purchasedAt: Date,
-      expiresAt: Date,
       features: {
-        maxJobApplications: {
+        maxJobsPerMonth: {
           type: Number,
-          default: 50,
+          default: 10,
+        },
+        aiCoverLetters: {
+          type: Boolean,
+          default: false,
         },
         prioritySupport: {
           type: Boolean,
           default: false,
         },
-        advancedFiltering: {
+        advancedFilters: {
           type: Boolean,
           default: false,
         },
       },
+      expiresAt: Date,
     },
 
-    // Application Statistics
-    stats: {
-      totalApplications: {
+    // Usage Statistics
+    usage: {
+      jobsAppliedThisMonth: {
         type: Number,
         default: 0,
       },
-      successfulApplications: {
+      totalJobsApplied: {
         type: Number,
         default: 0,
       },
@@ -191,6 +188,7 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
     emailVerificationToken: String,
+    emailVerifiedAt: Date, // Added this field
     passwordResetToken: String,
     passwordResetExpires: Date,
 
@@ -252,63 +250,46 @@ userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
 
   try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
+    this.password = await bcrypt.hash(this.password, 12);
     next();
   } catch (error) {
     next(error);
   }
 });
 
-// Pre-save middleware to update lastProfileUpdate
-userSchema.pre("save", function (next) {
-  if (this.isModified() && !this.isNew) {
-    this.lastProfileUpdate = new Date();
-  }
-  next();
-});
-
-// Instance method to check password
+// Compare password method
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Instance method to generate JWT token
+// Generate JWT token
 userSchema.methods.generateAuthToken = function () {
   return jwt.sign(
     {
-      userId: this._id,
+      id: this._id,
       email: this.email,
       userType: this.userType,
     },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE || "24h" }
+    { expiresIn: process.env.JWT_EXPIRE }
   );
 };
 
-// Instance method to generate refresh token
+// Generate refresh token
 userSchema.methods.generateRefreshToken = function () {
-  return jwt.sign({ userId: this._id }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRE || "7d",
-  });
+  return jwt.sign(
+    {
+      id: this._id,
+    },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRE }
+  );
 };
 
-// Static method to create admin user
-userSchema.statics.createAdminUser = async function () {
-  const adminExists = await this.findOne({ userType: "admin" });
-  if (adminExists) return adminExists;
-
-  const admin = new this({
-    name: "Admin User",
-    email: process.env.ADMIN_EMAIL || "admin@autoapplyjob.com",
-    password: process.env.ADMIN_PASSWORD || "admin123456",
-    userType: "admin",
-    isEmailVerified: true,
-    onboardingCompleted: true,
-    onboardingStep: "completed",
-  });
-
-  return await admin.save();
+// Reset usage counters (call monthly)
+userSchema.methods.resetMonthlyUsage = function () {
+  this.usage.jobsAppliedThisMonth = 0;
+  return this.save();
 };
 
 module.exports = mongoose.model("User", userSchema);

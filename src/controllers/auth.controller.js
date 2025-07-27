@@ -1,3 +1,4 @@
+// src/controllers/auth.controller.js
 const User = require("../models/User.model");
 const { ApiResponse } = require("../utils/apiResponse");
 const { asyncHandler, AppError } = require("../middleware/error.middleware");
@@ -118,20 +119,42 @@ const refreshToken = asyncHandler(async (req, res) => {
   });
 });
 
-// Verify email
+// Verify email - FIXED VERSION
 const verifyEmail = asyncHandler(async (req, res) => {
   const { token } = req.body;
 
+  if (!token) {
+    throw new AppError("Verification token is required", 400);
+  }
+
+  // Find user with the verification token
   const user = await User.findOne({ emailVerificationToken: token });
   if (!user) {
     throw new AppError("Invalid or expired verification token", 400);
   }
 
+  // Check if email is already verified
+  if (user.isEmailVerified) {
+    throw new AppError("Email is already verified", 400);
+  }
+
+  // Update user verification status
   user.isEmailVerified = true;
   user.emailVerificationToken = undefined;
+  user.emailVerifiedAt = new Date();
+
   await user.save();
 
-  ApiResponse.success(res, "Email verified successfully");
+  // Remove sensitive information from response
+  const userResponse = user.toObject();
+  delete userResponse.password;
+  delete userResponse.emailVerificationToken;
+
+  logger.info(`Email verified successfully for user: ${user.email}`);
+
+  ApiResponse.success(res, "Email verified successfully", {
+    user: userResponse,
+  });
 });
 
 // Forgot password
@@ -149,91 +172,68 @@ const forgotPassword = asyncHandler(async (req, res) => {
 
   // Generate reset token
   const resetToken = crypto.randomBytes(32).toString("hex");
-  user.passwordResetToken = crypto
-    .createHash("sha256")
-    .update(resetToken)
-    .digest("hex");
+  user.passwordResetToken = resetToken;
   user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-
   await user.save();
 
   // Send reset email
   try {
     await emailService.sendPasswordResetEmail(user.email, resetToken);
-    ApiResponse.success(res, "Password reset link sent to your email");
+    logger.info(`Password reset email sent to: ${user.email}`);
   } catch (error) {
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();
-
-    logger.error("Email send error:", error);
+    logger.error("Password reset email failed:", error);
     throw new AppError("Email could not be sent", 500);
   }
+
+  ApiResponse.success(
+    res,
+    "If an account with that email exists, a password reset link has been sent."
+  );
 });
 
 // Reset password
 const resetPassword = asyncHandler(async (req, res) => {
   const { token, password } = req.body;
 
-  // Hash the token to compare with stored hash
-  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
   const user = await User.findOne({
-    passwordResetToken: hashedToken,
+    passwordResetToken: token,
     passwordResetExpires: { $gt: Date.now() },
   });
 
   if (!user) {
-    throw new AppError("Token is invalid or has expired", 400);
+    throw new AppError("Invalid or expired reset token", 400);
   }
 
-  // Set new password
   user.password = password;
   user.passwordResetToken = undefined;
   user.passwordResetExpires = undefined;
   await user.save();
 
-  // Generate new auth token
-  const authToken = user.generateAuthToken();
-
-  ApiResponse.success(res, "Password reset successful", {
-    token: authToken,
-  });
+  ApiResponse.success(res, "Password reset successful");
 });
 
-// Change password (for logged-in users)
+// Change password
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  const userId = req.user._id;
+  const user = await User.findById(req.user.id).select("+password");
 
-  // Get user with password
-  const user = await User.findById(userId).select("+password");
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-
-  // Check current password
-  const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-  if (!isCurrentPasswordValid) {
+  const isPasswordValid = await user.comparePassword(currentPassword);
+  if (!isPasswordValid) {
     throw new AppError("Current password is incorrect", 400);
   }
 
-  // Update password
   user.password = newPassword;
   await user.save();
 
   ApiResponse.success(res, "Password changed successfully");
 });
 
-// Get current user profile
+// Get current user
 const getCurrentUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select(
-    "-password -emailVerificationToken -passwordResetToken"
-  );
-
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
+  const user = req.user; // Set by authenticate middleware
 
   ApiResponse.success(res, "User profile retrieved successfully", { user });
 });
