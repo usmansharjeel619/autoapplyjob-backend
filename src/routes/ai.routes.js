@@ -3,7 +3,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs").promises;
-const { protect } = require("../middleware/auth.middleware");
+const { authenticate } = require("../middleware/auth.middleware");
 const { asyncHandler, AppError } = require("../middleware/error.middleware");
 const aiService = require("../services/ai.service");
 const logger = require("../utils/logger");
@@ -52,7 +52,7 @@ const upload = multer({
 });
 
 // Apply authentication to all routes
-router.use(protect);
+router.use(authenticate);
 
 /**
  * @route   POST /api/v1/ai/extract-text
@@ -209,20 +209,22 @@ router.post(
  * @desc    Analyze how well a resume matches a job description
  * @access  Private
  */
-router.post("/analyze-job-match", async (req, res) => {
-  try {
-    const { resumeData, jobDescription } = req.body;
+router.post(
+  "/analyze-job-match",
+  asyncHandler(async (req, res) => {
+    try {
+      const { resumeData, jobDescription } = req.body;
 
-    if (!resumeData || !jobDescription) {
-      return res.status(400).json({
-        success: false,
-        message: "Both resume data and job description are required",
-      });
-    }
+      if (!resumeData || !jobDescription) {
+        throw new AppError(
+          "Both resume data and job description are required",
+          400
+        );
+      }
 
-    logger.info(`Analyzing job match for user ${req.user.id}`);
+      logger.info(`Analyzing job match for user ${req.user.id}`);
 
-    const prompt = `
+      const prompt = `
 Analyze how well this resume matches the given job description. Provide a detailed analysis.
 
 Resume Data:
@@ -246,57 +248,59 @@ Provide analysis in JSON format:
 }
 `;
 
-    const requestBody = {
-      model: "gpt-3.5-turbo",
-      messages: [
+      const requestBody = {
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an expert recruiter and resume analyst. Provide detailed, actionable feedback.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        max_tokens: 2000,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+      };
+
+      const axios = require("axios");
+      const response = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        requestBody,
         {
-          role: "system",
-          content:
-            "You are an expert recruiter and resume analyst. Provide detailed, actionable feedback.",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          timeout: 30000,
+        }
+      );
+
+      const analysis = JSON.parse(response.data.choices[0].message.content);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          analysis,
+          analyzedAt: new Date().toISOString(),
         },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      max_tokens: 2000,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-    };
+        message: "Job match analysis completed successfully",
+      });
+    } catch (error) {
+      logger.error("Job match analysis failed:", error);
 
-    const axios = require("axios");
-    const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      requestBody,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        timeout: 30000,
-      }
-    );
-
-    const analysis = JSON.parse(response.data.choices[0].message.content);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        analysis,
-        analyzedAt: new Date().toISOString(),
-      },
-      message: "Job match analysis completed successfully",
-    });
-  } catch (error) {
-    logger.error("Job match analysis failed:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to analyze job match",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-});
+      res.status(500).json({
+        success: false,
+        message: "Failed to analyze job match",
+        error:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
+    }
+  })
+);
 
 /**
  * @route   GET /api/v1/ai/status
