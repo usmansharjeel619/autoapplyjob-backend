@@ -165,7 +165,6 @@ Important: Return only the JSON object without any additional text, explanations
         },
         timeout: 30000, // 30 seconds timeout
       });
-      console.log("Response:", response);
 
       const openaiResponse = response.data;
 
@@ -266,7 +265,6 @@ Important: Return only the JSON object without any additional text, explanations
       processedData.languages = processedData.languages.filter(
         (lang) => lang.language
       );
-
       return processedData;
     } catch (error) {
       logger.error("Error processing parsed data:", error);
