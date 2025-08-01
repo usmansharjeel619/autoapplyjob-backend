@@ -1,10 +1,10 @@
-// src/models/User.model.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const userSchema = new mongoose.Schema(
   {
+    // Basic Information
     name: {
       type: String,
       required: [true, "Name is required"],
@@ -32,20 +32,23 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+
+    // User Type
     userType: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
     },
-    profilePicture: {
-      type: String,
-      default: null,
-    },
 
-    // Professional Information
+    // Profile Information
     currentJobTitle: {
       type: String,
       trim: true,
+      maxlength: [100, "Job title cannot exceed 100 characters"],
+    },
+    bio: {
+      type: String,
+      maxlength: [500, "Bio cannot exceed 500 characters"],
     },
     experienceLevel: {
       type: String,
@@ -65,57 +68,37 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    bio: {
-      type: String,
-      maxlength: [1000, "Bio cannot exceed 1000 characters"],
-    },
 
-    // Social Links
-    linkedinUrl: {
-      type: String,
-      trim: true,
-    },
-    githubUrl: {
-      type: String,
-      trim: true,
-    },
-    portfolioUrl: {
-      type: String,
-      trim: true,
-    },
-
-    // Resume
+    // Resume Information
     resume: {
-      filename: String,
-      originalName: String,
       url: String,
+      filename: String,
       uploadedAt: Date,
-      size: Number,
+      parsedData: {
+        skills: [String],
+        experience: [
+          {
+            company: String,
+            position: String,
+            duration: String,
+            description: String,
+          },
+        ],
+        education: [
+          {
+            institution: String,
+            degree: String,
+            year: String,
+          },
+        ],
+        summary: String,
+      },
     },
 
     // Job Preferences
     jobPreferences: {
       desiredRoles: [String],
       preferredLocations: [String],
-      jobTypes: [
-        {
-          type: String,
-          enum: [
-            "full-time",
-            "part-time",
-            "contract",
-            "freelance",
-            "internship",
-          ],
-        },
-      ],
-      workTypes: [
-        {
-          type: String,
-          enum: ["remote", "hybrid", "onsite"],
-        },
-      ],
-      industries: [String],
       salaryRange: {
         min: Number,
         max: Number,
@@ -124,25 +107,29 @@ const userSchema = new mongoose.Schema(
           default: "USD",
         },
       },
-      willingToRelocate: {
-        type: Boolean,
-        default: false,
+      employmentType: {
+        type: String,
+        enum: ["full_time", "part_time", "contract", "freelance", "remote"],
+        default: "full_time",
+      },
+      industries: [String],
+      workArrangement: {
+        type: String,
+        enum: ["remote", "hybrid", "on_site"],
+        default: "remote",
       },
     },
 
-    // Package/Subscription
+    // Package/Subscription Information
     package: {
       type: {
         type: String,
         enum: ["basic", "premium", "enterprise"],
         default: "basic",
       },
+      startDate: Date,
       features: {
-        maxJobsPerMonth: {
-          type: Number,
-          default: 10,
-        },
-        aiCoverLetters: {
+        autoApply: {
           type: Boolean,
           default: false,
         },
@@ -157,6 +144,37 @@ const userSchema = new mongoose.Schema(
       },
       expiresAt: Date,
     },
+
+    // Payment Information - NEW FIELD
+    paymentCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    paymentCompletedAt: {
+      type: Date,
+    },
+    selectedPlan: {
+      type: String,
+      enum: ["basic", "premium", "enterprise"],
+    },
+    paymentHistory: [
+      {
+        amount: Number,
+        currency: {
+          type: String,
+          default: "PKR",
+        },
+        plan: String,
+        paymentMethod: String,
+        transactionId: String,
+        status: {
+          type: String,
+          enum: ["pending", "completed", "failed", "refunded"],
+          default: "pending",
+        },
+        paidAt: Date,
+      },
+    ],
 
     // Usage Statistics
     usage: {
@@ -188,7 +206,7 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
     emailVerificationToken: String,
-    emailVerifiedAt: Date, // Added this field
+    emailVerifiedAt: Date,
     passwordResetToken: String,
     passwordResetExpires: Date,
 
@@ -220,10 +238,12 @@ userSchema.index({ email: 1 });
 userSchema.index({ userType: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ "package.type": 1 });
+userSchema.index({ paymentCompleted: 1 }); // NEW INDEX
 
 // Virtual for profile completeness
 userSchema.virtual("profileCompleteness").get(function () {
   let score = 0;
+
   const fields = [
     "name",
     "email",
@@ -286,10 +306,78 @@ userSchema.methods.generateRefreshToken = function () {
   );
 };
 
+// Mark payment as completed - NEW METHOD
+userSchema.methods.markPaymentCompleted = function (plan, paymentDetails = {}) {
+  this.paymentCompleted = true;
+  this.paymentCompletedAt = new Date();
+  this.selectedPlan = plan;
+
+  // Update package information
+  this.package.type = plan;
+  this.package.startDate = new Date();
+
+  // Set package features based on plan
+  switch (plan) {
+    case "premium":
+      this.package.features.autoApply = true;
+      this.package.features.prioritySupport = true;
+      this.package.features.advancedFilters = true;
+      break;
+    case "enterprise":
+      this.package.features.autoApply = true;
+      this.package.features.prioritySupport = true;
+      this.package.features.advancedFilters = true;
+      break;
+    default: // basic
+      this.package.features.autoApply = false;
+      this.package.features.prioritySupport = false;
+      this.package.features.advancedFilters = false;
+  }
+
+  // Add payment record
+  if (paymentDetails.amount) {
+    this.paymentHistory.push({
+      amount: paymentDetails.amount,
+      currency: paymentDetails.currency || "PKR",
+      plan: plan,
+      paymentMethod: paymentDetails.paymentMethod || "card",
+      transactionId: paymentDetails.transactionId,
+      status: "completed",
+      paidAt: new Date(),
+    });
+  }
+
+  return this.save();
+};
+
 // Reset usage counters (call monthly)
 userSchema.methods.resetMonthlyUsage = function () {
   this.usage.jobsAppliedThisMonth = 0;
   return this.save();
+};
+
+// Static method to create admin user
+userSchema.statics.createAdminUser = async function () {
+  const adminExists = await this.findOne({ userType: "admin" });
+
+  if (!adminExists) {
+    const admin = new this({
+      name: "Admin User",
+      email: process.env.ADMIN_EMAIL || "admin@autoapplyjob.com",
+      password: process.env.ADMIN_PASSWORD || "admin123456",
+      userType: "admin",
+      isEmailVerified: true,
+      onboardingCompleted: true,
+      onboardingStep: "completed",
+      paymentCompleted: true,
+      paymentCompletedAt: new Date(),
+    });
+
+    await admin.save();
+    return admin;
+  }
+
+  return adminExists;
 };
 
 module.exports = mongoose.model("User", userSchema);

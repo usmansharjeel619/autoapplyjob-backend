@@ -18,6 +18,7 @@ const jobRoutes = require("./routes/job.routes");
 const adminRoutes = require("./routes/admin.routes");
 const applicationRoutes = require("./routes/application.routes");
 const aiRoutes = require("./routes/ai.routes");
+const paymentRoutes = require("./routes/payment.routes"); // Add this import
 
 const app = express();
 
@@ -112,6 +113,7 @@ app.use(`/api/${API_VERSION}/jobs`, jobRoutes);
 app.use(`/api/${API_VERSION}/admin`, adminRoutes);
 app.use(`/api/${API_VERSION}/applications`, applicationRoutes);
 app.use(`/api/${API_VERSION}/ai`, aiLimiter, aiRoutes); // Apply AI-specific rate limiting
+app.use(`/api/${API_VERSION}/payment`, paymentRoutes); // Add payment routes
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -157,6 +159,13 @@ app.get(`/api/${API_VERSION}/docs`, (req, res) => {
         applications: "GET /admin/applications",
         jobs: "GET /admin/jobs",
         analytics: "GET /admin/analytics",
+      },
+      payment: {
+        plans: "GET /payment/plans",
+        complete: "POST /payment/complete",
+        status: "GET /payment/status",
+        verify: "POST /payment/verify",
+        cancel: "POST /payment/cancel",
       },
     },
     features: {

@@ -138,7 +138,7 @@ Important: Return only the JSON object without any additional text, explanations
 `;
 
       const requestBody = {
-        model: "gpt-3.5-turbo",
+        model: "gpt-4.1-mini",
         messages: [
           {
             role: "system",
@@ -157,6 +157,7 @@ Important: Return only the JSON object without any additional text, explanations
 
       logger.info("Sending request to OpenAI API for resume parsing");
 
+      console.log("Request Body:", JSON.stringify(requestBody, null, 2));
       const response = await axios.post(this.openaiApiUrl, requestBody, {
         headers: {
           "Content-Type": "application/json",
@@ -164,6 +165,7 @@ Important: Return only the JSON object without any additional text, explanations
         },
         timeout: 30000, // 30 seconds timeout
       });
+      console.log("Response:", response);
 
       const openaiResponse = response.data;
 
@@ -346,7 +348,7 @@ Return suggestions in JSON format:
 `;
 
       const requestBody = {
-        model: "gpt-3.5-turbo",
+        model: "gpt-4.1-mini",
         messages: [
           {
             role: "system",
