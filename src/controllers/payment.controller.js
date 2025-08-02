@@ -36,15 +36,10 @@ const completePayment = asyncHandler(async (req, res) => {
       return ApiResponse.success(res, "Payment already completed", {
         paymentCompleted: true,
         selectedPlan: user.selectedPlan,
+        onboardingCompleted: user.onboardingCompleted, // Include this
       });
     }
 
-    // In a real implementation, you would:
-    // 1. Verify payment with payment gateway
-    // 2. Check transaction status
-    // 3. Validate payment amount matches plan price
-
-    // For now, we'll simulate successful payment processing
     const paymentDetails = {
       amount,
       currency: currency || "PKR",
@@ -54,10 +49,16 @@ const completePayment = asyncHandler(async (req, res) => {
         `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };
 
-    // Mark payment as completed
+    // Mark payment as completed AND ensure onboarding stays completed
     await user.markPaymentCompleted(plan, paymentDetails);
 
-    // Log successful payment
+    // IMPORTANT: Explicitly ensure onboarding completed status is preserved
+    if (!user.onboardingCompleted) {
+      user.onboardingCompleted = true;
+      user.onboardingStep = "completed";
+      await user.save();
+    }
+
     logger.info(`Payment completed for user ${userId}`, {
       userId,
       plan,
@@ -65,10 +66,11 @@ const completePayment = asyncHandler(async (req, res) => {
       transactionId: paymentDetails.transactionId,
     });
 
-    // Return success response
+    // Return success response with onboarding status
     ApiResponse.success(res, "Payment completed successfully", {
       paymentCompleted: true,
       selectedPlan: plan,
+      onboardingCompleted: user.onboardingCompleted, // Include this
       packageFeatures: user.package.features,
       paymentDetails: {
         amount,

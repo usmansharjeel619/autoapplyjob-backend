@@ -410,3 +410,20 @@
 {"level":"info","message":"Sending request to OpenAI API for resume parsing","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:26:55.151Z"}
 {"level":"info","message":"Resume parsing completed successfully","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:27:23.156Z"}
 {"level":"info","message":"Cleaned up file: D:\\Freelance Projects\\AutoApplyJob.co\\autoapplyjob-backend\\uploads\\resumes\\resume-1754076415080-753372770.pdf","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:27:23.158Z"}
+{"level":"info","message":"SIGINT received, shutting down gracefully","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:43:46.601Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:44:34.983Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:44:35.023Z"}
+{"level":"info","message":"Processing resume upload for user 688d081d2788d03ea966b1b1: Usman_Resume.pdf","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:45:51.475Z"}
+{"level":"info","message":"Starting resume parsing for file: D:\\Freelance Projects\\AutoApplyJob.co\\autoapplyjob-backend\\uploads\\resumes\\resume-1754077551471-389607853.pdf","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:45:51.476Z"}
+{"level":"info","message":"Text extracted successfully, length: 6182 characters","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:45:52.562Z"}
+{"level":"info","message":"Sending request to OpenAI API for resume parsing","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:45:52.564Z"}
+{"level":"info","message":"Resume parsing completed successfully","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:46:11.190Z"}
+{"level":"info","message":"Cleaned up file: D:\\Freelance Projects\\AutoApplyJob.co\\autoapplyjob-backend\\uploads\\resumes\\resume-1754077551471-389607853.pdf","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:46:11.191Z"}
+{"amount":2999,"level":"info","message":"Payment completed for user 688d081d2788d03ea966b1b1","plan":"basic","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:47:01.098Z","transactionId":"txn_1754077621073_rrl1epawp","userId":"688d081d2788d03ea966b1b1"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:54:08.772Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:54:08.834Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:54:11.276Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:54:11.348Z"}
+{"amount":2999,"level":"info","message":"Payment completed for user 688d081d2788d03ea966b1b1","plan":"basic","service":"autoapplyjob-backend","timestamp":"2025-08-01T19:55:19.537Z","transactionId":"txn_1754078119502_swwjhrb9t","userId":"688d081d2788d03ea966b1b1"}
+{"isOperational":true,"level":"error","message":"Invalid email or password","service":"autoapplyjob-backend","stack":"Error: Invalid email or password\n    at D:\\Freelance Projects\\AutoApplyJob.co\\autoapplyjob-backend\\src\\controllers\\auth.controller.js:63:11\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)","status":"fail","statusCode":401,"timestamp":"2025-08-01T20:46:32.759Z"}
+{"isOperational":true,"level":"error","message":"Invalid email or password","service":"autoapplyjob-backend","stack":"Error: Invalid email or password\n    at D:\\Freelance Projects\\AutoApplyJob.co\\autoapplyjob-backend\\src\\controllers\\auth.controller.js:63:11\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)","status":"fail","statusCode":401,"timestamp":"2025-08-01T20:46:51.910Z"}
