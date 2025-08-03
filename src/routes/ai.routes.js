@@ -77,7 +77,7 @@ router.post(
       );
 
       // Clean up the uploaded file
-      await aiService.cleanupFile(filePath);
+      // await aiService.cleanupFile(filePath);
 
       res.status(200).json({
         success: true,
@@ -131,7 +131,7 @@ router.post(
       );
 
       // Clean up the uploaded file
-      await aiService.cleanupFile(filePath);
+      // await aiService.cleanupFile(filePath);
 
       res.status(200).json({
         success: true,
