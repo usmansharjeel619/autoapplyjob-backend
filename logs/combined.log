@@ -476,3 +476,9 @@
 {"level":"info","message":"Sending request to OpenAI API for resume parsing","service":"autoapplyjob-backend","timestamp":"2025-08-03T08:36:55.780Z"}
 {"level":"info","message":"Resume parsing completed successfully","service":"autoapplyjob-backend","timestamp":"2025-08-03T08:37:11.487Z"}
 {"amount":2999,"level":"info","message":"Payment completed for user 688f1afc82962f1ac0ec1839","plan":"basic","service":"autoapplyjob-backend","timestamp":"2025-08-03T08:38:19.872Z","transactionId":"txn_1754210299825_wv5a6lw96","userId":"688f1afc82962f1ac0ec1839"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-08-04T07:56:37.440Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-08-04T07:56:37.522Z"}
+{"level":"warn","message":"MongoDB disconnected","service":"autoapplyjob-backend","timestamp":"2025-08-04T10:51:15.474Z"}
+{"level":"info","message":"MongoDB reconnected","service":"autoapplyjob-backend","timestamp":"2025-08-04T10:52:30.759Z"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"autoapplyjob-backend","timestamp":"2025-08-04T12:52:13.386Z"}
+{"level":"info","message":"MongoDB Connected: localhost","service":"autoapplyjob-backend","timestamp":"2025-08-04T12:52:13.423Z"}
