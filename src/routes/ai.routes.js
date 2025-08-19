@@ -105,7 +105,7 @@ router.post(
 
 /**
  * @route   POST /api/v1/ai/parse-resume
- * @desc    Parse resume using AI
+ * @desc    Parse resume using AI and save to user profile
  * @access  Private
  */
 router.post(
@@ -120,8 +120,10 @@ router.post(
       }
 
       filePath = req.file.path;
+      const userId = req.user.id;
+
       logger.info(
-        `Processing resume upload for user ${req.user.id}: ${req.file.originalname}`
+        `Processing resume upload for user ${userId}: ${req.file.originalname}`
       );
 
       // Parse the resume using AI service
@@ -130,25 +132,117 @@ router.post(
         req.file.mimetype
       );
 
-      // Clean up the uploaded file
-      // await aiService.cleanupFile(filePath);
+      // Update user with resume information
+      const User = require("../models/User.model");
+      const user = await User.findById(userId);
+
+      if (!user) {
+        throw new AppError("User not found", 404);
+      }
+
+      // Prepare resume data to save
+      const resumeData = {
+        localPath: filePath, // Save the local file path
+        filename: req.file.filename, // Generated filename
+        originalName: req.file.originalname, // Original filename from user
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        uploadedAt: new Date(),
+        parsedAt: new Date(),
+        parseStatus: "success",
+        parsedData: {
+          skills: result.parsedData.extractedSkills || [],
+          experience: result.parsedData.workExperience || [],
+          education: result.parsedData.education || [],
+          certifications: result.parsedData.certifications || [],
+          projects: result.parsedData.projects || [],
+          languages: result.parsedData.languages || [],
+          personalInfo: result.parsedData.personalInfo || {},
+          summary: result.extractedText || "",
+        },
+      };
+
+      // Update user's resume field
+      user.resume = resumeData;
+
+      // Also update user's skills from parsed data
+      if (
+        result.parsedData.extractedSkills &&
+        result.parsedData.extractedSkills.length > 0
+      ) {
+        user.skills = [
+          ...new Set([...user.skills, ...result.parsedData.extractedSkills]),
+        ];
+      }
+
+      // Update personal info if not already set
+      if (result.parsedData.personalInfo) {
+        const personalInfo = result.parsedData.personalInfo;
+        if (personalInfo.name && !user.name) {
+          user.name = personalInfo.name;
+        }
+        if (personalInfo.phone && !user.phone) {
+          user.phone = personalInfo.phone;
+        }
+        if (personalInfo.location && !user.location) {
+          user.location = personalInfo.location;
+        }
+      }
+
+      await user.save();
+
+      logger.info(`Resume saved successfully for user ${userId}`);
 
       res.status(200).json({
         success: true,
         data: {
           parsedData: result.parsedData,
+          resumeInfo: {
+            filename: req.file.filename,
+            originalName: req.file.originalname,
+            fileSize: req.file.size,
+            uploadedAt: resumeData.uploadedAt,
+            parsedAt: resumeData.parsedAt,
+            parseStatus: "success",
+          },
           metadata: {
             ...result.metadata,
-            filename: req.file.originalname,
-            uploadTime: new Date().toISOString(),
+            fileSaved: true,
+            localPath: filePath, // Include for debugging (remove in production)
           },
         },
-        message: "Resume parsed successfully",
+        message: "Resume parsed and saved successfully",
       });
     } catch (error) {
       logger.error("Resume parsing failed:", error);
 
-      // Clean up file on error
+      // Update user with failed parse status if user exists
+      try {
+        if (req.user && req.file) {
+          const User = require("../models/User.model");
+          const user = await User.findById(req.user.id);
+          if (user) {
+            user.resume = {
+              ...user.resume,
+              localPath: filePath,
+              filename: req.file.filename,
+              originalName: req.file.originalname,
+              fileSize: req.file.size,
+              mimeType: req.file.mimetype,
+              uploadedAt: new Date(),
+              parseStatus: "failed",
+            };
+            await user.save();
+          }
+        }
+      } catch (saveError) {
+        logger.error(
+          "Failed to save resume info after parse error:",
+          saveError
+        );
+      }
+
+      // Clean up file on error (optional - you might want to keep it for retry)
       if (filePath) {
         await aiService.cleanupFile(filePath).catch(() => {});
       }

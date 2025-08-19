@@ -69,11 +69,20 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Resume Information
+    // Resume Information - LOCAL STORAGE ONLY
     resume: {
-      url: String,
-      filename: String,
+      localPath: String, // Local file path on server
+      filename: String, // Generated filename
+      originalName: String, // Original file name from user
+      fileSize: Number, // File size in bytes
+      mimeType: String, // MIME type (application/pdf, etc.)
       uploadedAt: Date,
+      parsedAt: Date, // When the resume was parsed
+      parseStatus: {
+        type: String,
+        enum: ["pending", "success", "failed"],
+        default: "pending",
+      },
       parsedData: {
         skills: [String],
         experience: [
@@ -91,6 +100,33 @@ const userSchema = new mongoose.Schema(
             year: String,
           },
         ],
+        certifications: [
+          {
+            name: String,
+            issuer: String,
+            date: String,
+          },
+        ],
+        projects: [
+          {
+            name: String,
+            description: String,
+            technologies: [String],
+            duration: String,
+          },
+        ],
+        languages: [
+          {
+            language: String,
+            proficiency: String,
+          },
+        ],
+        personalInfo: {
+          name: String,
+          email: String,
+          phone: String,
+          location: String,
+        },
         summary: String,
       },
     },
@@ -260,7 +296,7 @@ userSchema.virtual("profileCompleteness").get(function () {
   });
 
   if (this.skills && this.skills.length > 0) score += 10;
-  if (this.resume && this.resume.url) score += 10;
+  if (this.resume && this.resume.localPath) score += 10; // Changed from .url to .localPath
 
   return Math.min(score, 100);
 });

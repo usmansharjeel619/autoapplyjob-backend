@@ -3,12 +3,13 @@ const Job = require("../models/Job.model");
 const Application = require("../models/Application.model");
 const { ApiResponse } = require("../utils/apiResponse");
 const { asyncHandler, AppError } = require("../middleware/error.middleware");
-const uploadService = require("../services/upload.service");
 const scrapingService = require("../services/scraping.service");
 const logger = require("../utils/logger");
 const { cleanupOldFiles } = require("../middleware/upload.middleware");
+const fs = require("fs");
+const path = require("path");
 
-// Get user profile
+// Get user profile - UPDATED to include resume info
 const getProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select(
     "-password -emailVerificationToken -passwordResetToken"
@@ -18,7 +19,32 @@ const getProfile = asyncHandler(async (req, res) => {
     throw new AppError("User not found", 404);
   }
 
-  ApiResponse.success(res, "Profile retrieved successfully", { user });
+  // Prepare response with resume info
+  const userProfile = user.toObject();
+
+  // Add resume status information
+  if (userProfile.resume) {
+    userProfile.resumeStatus = {
+      hasResume: true,
+      parseStatus: userProfile.resume.parseStatus,
+      uploadedAt: userProfile.resume.uploadedAt,
+      parsedAt: userProfile.resume.parsedAt,
+      filename: userProfile.resume.originalName,
+      fileSize: userProfile.resume.fileSize,
+    };
+
+    // Remove sensitive local path from response
+    delete userProfile.resume.localPath;
+  } else {
+    userProfile.resumeStatus = {
+      hasResume: false,
+      parseStatus: null,
+    };
+  }
+
+  ApiResponse.success(res, "Profile retrieved successfully", {
+    user: userProfile,
+  });
 });
 
 // Update user profile
@@ -58,18 +84,19 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   // If profile update includes job preferences, trigger job scraping
   if (req.body.jobPreferences) {
-    scrapingService
-      .scheduleJobScraping(userId)
-      .catch((err) => logger.error("Failed to schedule job scraping:", err));
+    // Trigger background job scraping
+    scrapingService.queueJobScraping(userId).catch((error) => {
+      logger.error("Failed to queue job scraping:", error);
+    });
   }
 
   ApiResponse.success(res, "Profile updated successfully", { user });
 });
 
-// Upload resume
+// Upload resume - UPDATED to work with LOCAL STORAGE ONLY
 const uploadResume = asyncHandler(async (req, res) => {
   if (!req.file) {
-    throw new AppError("Please upload a resume file", 400);
+    throw new AppError("No file uploaded", 400);
   }
 
   const userId = req.user._id;
@@ -80,37 +107,119 @@ const uploadResume = asyncHandler(async (req, res) => {
   }
 
   try {
-    // Upload to cloud storage (Cloudinary)
-    const uploadResult = await uploadService.uploadFile(req.file);
-
-    // Clean up old resume file if exists
-    if (user.resume && user.resume.cloudinaryPublicId) {
-      await uploadService.deleteFile(user.resume.cloudinaryPublicId);
+    // Clean up old resume file if it exists
+    if (
+      user.resume &&
+      user.resume.localPath &&
+      fs.existsSync(user.resume.localPath)
+    ) {
+      try {
+        fs.unlinkSync(user.resume.localPath);
+        logger.info(`Cleaned up old resume file: ${user.resume.localPath}`);
+      } catch (cleanupError) {
+        logger.warn("Failed to cleanup old resume file:", cleanupError);
+      }
     }
 
-    // Update user with new resume info
-    user.resume = {
-      fileName: uploadResult.public_id,
-      originalName: req.file.originalname,
-      url: uploadResult.secure_url,
-      cloudinaryPublicId: uploadResult.public_id,
+    // Save basic file info immediately (LOCAL STORAGE ONLY)
+    const resumeData = {
+      localPath: req.file.path, // Store local file path
+      filename: req.file.filename, // Generated filename
+      originalName: req.file.originalname, // Original filename from user
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
       uploadedAt: new Date(),
+      parseStatus: "pending",
     };
 
+    // Update user with resume information
+    user.resume = resumeData;
     await user.save();
 
-    // Clean up local file
-    cleanupOldFiles(req.file.path);
+    logger.info(
+      `Resume file saved locally for user ${userId}: ${req.file.originalname}`
+    );
 
+    // Return success response
     ApiResponse.success(res, "Resume uploaded successfully", {
-      resume: user.resume,
+      resumeInfo: {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        uploadedAt: resumeData.uploadedAt,
+        parseStatus: "pending",
+      },
+      message:
+        "Resume uploaded successfully. Use the AI parsing endpoint to extract information.",
     });
   } catch (error) {
-    // Clean up local file on error
-    cleanupOldFiles(req.file.path);
-    logger.error("Resume upload error:", error);
-    throw new AppError("Failed to upload resume", 500);
+    logger.error("Resume upload failed:", error);
+
+    // Clean up file on error
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        logger.warn("Failed to cleanup file after error:", cleanupError);
+      }
+    }
+
+    throw new AppError("Failed to save resume", 500);
   }
+});
+
+// Get resume download URL - NEW METHOD
+const downloadResume = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const user = await User.findById(userId);
+
+  if (!user || !user.resume || !user.resume.localPath) {
+    throw new AppError("No resume found", 404);
+  }
+
+  // Check if file exists
+  if (!fs.existsSync(user.resume.localPath)) {
+    throw new AppError("Resume file not found on server", 404);
+  }
+
+  // Set appropriate headers
+  res.setHeader("Content-Type", user.resume.mimeType);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${user.resume.originalName}"`
+  );
+
+  // Stream the file
+  const fileStream = fs.createReadStream(user.resume.localPath);
+  fileStream.pipe(res);
+});
+
+// Delete resume - NEW METHOD
+const deleteResume = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (user.resume && user.resume.localPath) {
+    // Clean up the file
+    try {
+      if (fs.existsSync(user.resume.localPath)) {
+        fs.unlinkSync(user.resume.localPath);
+        logger.info(`Deleted resume file: ${user.resume.localPath}`);
+      }
+    } catch (error) {
+      logger.warn("Failed to delete resume file:", error);
+    }
+  }
+
+  // Clear resume data
+  user.resume = undefined;
+  await user.save();
+
+  ApiResponse.success(res, "Resume deleted successfully");
 });
 
 // Get dashboard statistics
@@ -177,7 +286,7 @@ const getDashboardStats = asyncHandler(async (req, res) => {
       }),
       profileCompleteness,
       responseRate,
-      applicationsTrend: 0, // Calculate based on previous period if needed
+      applicationsTrend: 0, // You can implement this based on week-over-week data
     },
     recentApplications: recentApplications.map((app) => ({
       id: app._id,
@@ -228,7 +337,7 @@ const getJobs = asyncHandler(async (req, res) => {
   };
 
   if (status) {
-    filter.status = status;
+    filter.applicationStatus = status;
   }
 
   // Get jobs with pagination
@@ -304,7 +413,7 @@ const saveJob = asyncHandler(async (req, res) => {
 
   // Check if job belongs to this user
   if (job.targetUser.toString() !== userId.toString()) {
-    throw new AppError("Job not found", 404);
+    throw new AppError("You can only save jobs targeted to you", 403);
   }
 
   // Check if already applied or saved
@@ -314,7 +423,7 @@ const saveJob = asyncHandler(async (req, res) => {
   });
 
   if (existingApplication) {
-    throw new AppError("Job already saved/applied", 400);
+    throw new AppError("You have already saved or applied to this job", 409);
   }
 
   // Create application with pending_review status
@@ -342,7 +451,7 @@ const unsaveJob = asyncHandler(async (req, res) => {
   });
 
   if (!application) {
-    throw new AppError("Saved job not found", 404);
+    throw new AppError("Job not found in your saved list", 404);
   }
 
   await application.deleteOne();
@@ -353,16 +462,10 @@ const unsaveJob = asyncHandler(async (req, res) => {
 // Get application history
 const getApplicationHistory = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const {
-    page = 1,
-    pageSize = 20,
-    status,
-    sortBy = "createdAt",
-    sortOrder = "desc",
-  } = req.query;
+  const { page = 1, pageSize = 20, status, sortBy = "createdAt" } = req.query;
 
   const skip = (page - 1) * pageSize;
-  const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+  const sort = { [sortBy]: -1 };
 
   // Build filter
   const filter = { user: userId };
@@ -370,12 +473,10 @@ const getApplicationHistory = asyncHandler(async (req, res) => {
     filter.status = status;
   }
 
-  // Get applications with job details
+  // Get applications with pagination
   const [applications, total] = await Promise.all([
     Application.find(filter)
-      .populate("job", "title company location workType jobType salary")
-      .populate("reviewedBy", "name")
-      .populate("appliedBy", "name")
+      .populate("job", "title company location salary")
       .sort(sort)
       .skip(skip)
       .limit(parseInt(pageSize))
@@ -383,31 +484,43 @@ const getApplicationHistory = asyncHandler(async (req, res) => {
     Application.countDocuments(filter),
   ]);
 
+  const totalPages = Math.ceil(total / pageSize);
+
   ApiResponse.success(res, "Application history retrieved successfully", {
     applications,
     pagination: {
       page: parseInt(page),
       pageSize: parseInt(pageSize),
       total,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
     },
   });
 });
 
 // Get user settings
 const getSettings = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id)
-    .select("jobPreferences package")
-    .lean();
-
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
+  const user = await User.findById(req.user._id).select(
+    "name email preferences notifications jobPreferences"
+  );
 
   ApiResponse.success(res, "Settings retrieved successfully", {
     settings: {
+      profile: {
+        name: user.name,
+        email: user.email,
+      },
       jobPreferences: user.jobPreferences,
-      package: user.package,
+      notifications: user.notifications || {
+        email: true,
+        push: true,
+        sms: false,
+      },
+      preferences: user.preferences || {
+        autoApply: true,
+        privacyLevel: "medium",
+      },
     },
   });
 });
@@ -415,38 +528,20 @@ const getSettings = asyncHandler(async (req, res) => {
 // Update user settings
 const updateSettings = asyncHandler(async (req, res) => {
   const userId = req.user._id;
-  const { jobPreferences, autoApplyEnabled } = req.body;
+  const { jobPreferences, notifications, preferences } = req.body;
 
   const updateData = {};
-
-  if (jobPreferences) {
-    updateData.jobPreferences = jobPreferences;
-  }
-
-  if (typeof autoApplyEnabled === "boolean") {
-    updateData["jobPreferences.autoApplyEnabled"] = autoApplyEnabled;
-  }
+  if (jobPreferences) updateData.jobPreferences = jobPreferences;
+  if (notifications) updateData.notifications = notifications;
+  if (preferences) updateData.preferences = preferences;
 
   const user = await User.findByIdAndUpdate(userId, updateData, {
     new: true,
     runValidators: true,
-  }).select("jobPreferences");
-
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-
-  // If job preferences changed, trigger new job scraping
-  if (jobPreferences) {
-    scrapingService
-      .scheduleJobScraping(userId)
-      .catch((err) => logger.error("Failed to schedule job scraping:", err));
-  }
+  }).select("jobPreferences notifications preferences");
 
   ApiResponse.success(res, "Settings updated successfully", {
-    settings: {
-      jobPreferences: user.jobPreferences,
-    },
+    settings: user,
   });
 });
 
@@ -456,22 +551,31 @@ const completeOnboardingStep = asyncHandler(async (req, res) => {
   const { step } = req.params;
   const stepData = req.body;
 
+  const validSteps = ["basic_info", "resume_upload", "job_preferences"];
+  if (!validSteps.includes(step)) {
+    throw new AppError("Invalid onboarding step", 400);
+  }
+
   const user = await User.findById(userId);
   if (!user) {
     throw new AppError("User not found", 404);
   }
 
-  // Update user data based on step
+  // Update user based on step
   switch (step) {
     case "basic_info":
-      Object.assign(user, {
-        name: stepData.name || user.name,
-        phone: stepData.phone || user.phone,
-        currentJobTitle: stepData.currentJobTitle || user.currentJobTitle,
-        experienceLevel: stepData.experienceLevel || user.experienceLevel,
-        educationLevel: stepData.educationLevel || user.educationLevel,
-      });
-      user.onboardingStep = "resume_upload";
+      user.name = stepData.name || user.name;
+      user.phone = stepData.phone || user.phone;
+      user.currentJobTitle = stepData.currentJobTitle || user.currentJobTitle;
+      user.experienceLevel = stepData.experienceLevel || user.experienceLevel;
+      user.educationLevel = stepData.educationLevel || user.educationLevel;
+      user.location = stepData.location || user.location;
+      user.bio = stepData.bio || user.bio;
+      user.skills = stepData.skills || user.skills;
+      break;
+
+    case "resume_upload":
+      // Resume upload is handled separately
       break;
 
     case "job_preferences":
@@ -479,46 +583,82 @@ const completeOnboardingStep = asyncHandler(async (req, res) => {
         ...user.jobPreferences,
         ...stepData,
       };
-      user.onboardingStep = "completed";
-      user.onboardingCompleted = true;
       break;
+  }
 
-    default:
-      throw new AppError("Invalid onboarding step", 400);
+  // Update onboarding step
+  const stepOrder = ["basic_info", "resume_upload", "job_preferences"];
+  const currentStepIndex = stepOrder.indexOf(step);
+  const nextStepIndex = currentStepIndex + 1;
+
+  if (nextStepIndex < stepOrder.length) {
+    user.onboardingStep = stepOrder[nextStepIndex];
+  } else {
+    user.onboardingStep = "completed";
+    user.onboardingCompleted = true;
   }
 
   await user.save();
 
-  // If onboarding completed, trigger initial job scraping
-  if (user.onboardingCompleted) {
-    scrapingService
-      .scheduleJobScraping(userId)
-      .catch((err) =>
-        logger.error("Failed to schedule initial job scraping:", err)
-      );
-  }
-
-  ApiResponse.success(res, "Onboarding step completed successfully", {
-    user: {
-      onboardingStep: user.onboardingStep,
-      onboardingCompleted: user.onboardingCompleted,
-    },
+  ApiResponse.success(res, `${step} completed successfully`, {
+    nextStep: user.onboardingStep,
+    onboardingCompleted: user.onboardingCompleted,
   });
 });
 
 // Get onboarding progress
 const getOnboardingProgress = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id)
-    .select("onboardingStep onboardingCompleted")
-    .lean();
+  const user = await User.findById(req.user._id).select(
+    "onboardingStep onboardingCompleted name phone currentJobTitle experienceLevel educationLevel location bio skills resume jobPreferences"
+  );
 
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
+  const progress = {
+    currentStep: user.onboardingStep,
+    completed: user.onboardingCompleted,
+    steps: {
+      basic_info: {
+        completed: !!(
+          user.name &&
+          user.phone &&
+          user.currentJobTitle &&
+          user.experienceLevel &&
+          user.educationLevel &&
+          user.location
+        ),
+        data: {
+          name: user.name,
+          phone: user.phone,
+          currentJobTitle: user.currentJobTitle,
+          experienceLevel: user.experienceLevel,
+          educationLevel: user.educationLevel,
+          location: user.location,
+          bio: user.bio,
+          skills: user.skills,
+        },
+      },
+      resume_upload: {
+        completed: !!(user.resume && user.resume.localPath),
+        data: user.resume
+          ? {
+              filename: user.resume.originalName,
+              uploadedAt: user.resume.uploadedAt,
+              parseStatus: user.resume.parseStatus,
+            }
+          : null,
+      },
+      job_preferences: {
+        completed: !!(
+          user.jobPreferences &&
+          user.jobPreferences.desiredRoles &&
+          user.jobPreferences.desiredRoles.length > 0
+        ),
+        data: user.jobPreferences,
+      },
+    },
+  };
 
   ApiResponse.success(res, "Onboarding progress retrieved successfully", {
-    onboardingStep: user.onboardingStep,
-    onboardingCompleted: user.onboardingCompleted,
+    progress,
   });
 });
 
@@ -526,6 +666,8 @@ module.exports = {
   getProfile,
   updateProfile,
   uploadResume,
+  downloadResume, // NEW
+  deleteResume, // NEW
   getDashboardStats,
   getJobs,
   getSavedJobs,

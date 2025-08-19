@@ -34,6 +34,12 @@ router.post(
   userController.uploadResume
 );
 
+// NEW: Download resume
+router.get("/resume/download", userController.downloadResume);
+
+// NEW: Delete resume
+router.delete("/resume", userController.deleteResume);
+
 // Dashboard - requires payment completion
 router.get(
   "/dashboard",

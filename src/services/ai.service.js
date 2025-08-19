@@ -293,6 +293,9 @@ Important: Return only the JSON object without any additional text, explanations
 
       logger.info("Resume parsing completed successfully");
 
+      // DON'T clean up the file here - it's now saved in the database
+      // await this.cleanupFile(filePath);
+
       return {
         extractedText: extractedText.substring(0, 1000), // First 1000 chars for debugging
         parsedData,
@@ -302,6 +305,8 @@ Important: Return only the JSON object without any additional text, explanations
           skillsCount: parsedData.extractedSkills.length,
           experienceCount: parsedData.workExperience.length,
           educationCount: parsedData.education.length,
+          fileSaved: true,
+          localPath: filePath,
         },
       };
     } catch (error) {
