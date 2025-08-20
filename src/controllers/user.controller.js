@@ -168,7 +168,7 @@ const uploadResume = asyncHandler(async (req, res) => {
   }
 });
 
-// Get resume download URL - NEW METHOD
+// Get resume download URL - FIXED METHOD
 const downloadResume = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const user = await User.findById(userId);
@@ -182,19 +182,54 @@ const downloadResume = asyncHandler(async (req, res) => {
     throw new AppError("Resume file not found on server", 404);
   }
 
-  // Set appropriate headers
-  res.setHeader("Content-Type", user.resume.mimeType);
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="${user.resume.originalName}"`
-  );
+  try {
+    // Get file stats for content length
+    const stats = fs.statSync(user.resume.localPath);
 
-  // Stream the file
-  const fileStream = fs.createReadStream(user.resume.localPath);
-  fileStream.pipe(res);
+    // Set appropriate headers for file download
+    res.setHeader(
+      "Content-Type",
+      user.resume.mimeType || "application/octet-stream"
+    );
+    res.setHeader("Content-Length", stats.size);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${encodeURIComponent(user.resume.originalName)}"`
+    );
+
+    // Add cache control headers
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
+    // Create read stream and pipe to response
+    const fileStream = fs.createReadStream(user.resume.localPath);
+
+    // Handle stream errors
+    fileStream.on("error", (error) => {
+      logger.error("File stream error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: "Error reading file",
+        });
+      }
+    });
+
+    // Pipe the file to response
+    fileStream.pipe(res);
+
+    // Log successful download
+    logger.info(
+      `Resume downloaded by user ${userId}: ${user.resume.originalName}`
+    );
+  } catch (error) {
+    logger.error("Resume download error:", error);
+    throw new AppError("Failed to download resume", 500);
+  }
 });
 
-// Delete resume - NEW METHOD
+// Delete resume - UPDATED METHOD
 const deleteResume = asyncHandler(async (req, res) => {
   const userId = req.user._id;
   const user = await User.findById(userId);
@@ -204,20 +239,23 @@ const deleteResume = asyncHandler(async (req, res) => {
   }
 
   if (user.resume && user.resume.localPath) {
-    // Clean up the file
+    // Try to delete the physical file
     try {
       if (fs.existsSync(user.resume.localPath)) {
         fs.unlinkSync(user.resume.localPath);
-        logger.info(`Deleted resume file: ${user.resume.localPath}`);
+        logger.info(`Resume file deleted: ${user.resume.localPath}`);
       }
-    } catch (error) {
-      logger.warn("Failed to delete resume file:", error);
+    } catch (fileError) {
+      logger.warn(`Failed to delete resume file: ${fileError.message}`);
+      // Continue with database cleanup even if file deletion fails
     }
   }
 
-  // Clear resume data
+  // Clear resume data from database
   user.resume = undefined;
   await user.save();
+
+  logger.info(`Resume data cleared for user ${userId}`);
 
   ApiResponse.success(res, "Resume deleted successfully");
 });
@@ -666,8 +704,8 @@ module.exports = {
   getProfile,
   updateProfile,
   uploadResume,
-  downloadResume, // NEW
-  deleteResume, // NEW
+  downloadResume, // Make sure this is exported
+  deleteResume, // Make sure this is exported
   getDashboardStats,
   getJobs,
   getSavedJobs,
